@@ -170,7 +170,125 @@ Every error has the body `{ "error": "CODE", "message": "human readable text" }`
 
 Responses contain every field of the brief's contract; a few extra fields are added (`className`, `createdAt`, `confirmedAt`). IDs are UUID strings.
 
-## 7. More
+## 7. How it works – implemented logic
+
+### 7.1 Data model ([`schema.sql`](backend/src/SchoolAdmission.Api/Data/schema.sql))
+
+1. **`classes`** – one row per class *and shift* (`Class 6 - Morning Shift` and `Class 6 - Day Shift` are two classes): `id`, `name`, `total_seats`, `created_at`.
+2. **`holds`** – one row per application: `id`, `class_id`, `student_id` (17-digit text), `status` (`HELD` / `CONFIRMED` / `EXPIRED` / `CANCELLED`), `created_at`, `expires_at`, `confirmed_at`, `cancelled_at`.
+3. **Seat numbers are never stored.** They are counted from `holds` on every request, so they can never drift and a repeated payment can never count twice.
+4. **Status changes are `UPDATE`s of the same row** (pay, cancel, expire). A new row only appears when a new application is made, so the history stays visible.
+5. **Database guards:** `CHECK` constraints (seats > 0, 17-digit student ID, allowed statuses), a foreign key from `holds` to `classes`, and the partial unique index `ux_holds_active (class_id, student_id) WHERE status IN ('HELD','CONFIRMED')` – PostgreSQL itself refuses a second active application of a student in one class.
+6. The backend runs `schema.sql` at every startup (`IF NOT EXISTS`, under an advisory lock so two processes starting together do not race). No migrations, no manual table creation needed.
+
+### 7.2 Student identity
+
+1. No login. The student is the 17-digit birth registration number sent in the `X-Student-Id` header.
+2. One shared filter checks the header **before any database work**: missing → `400 MISSING_STUDENT_ID`, not exactly 17 ASCII digits (after trimming) → `400 INVALID_STUDENT_ID`.
+3. The UI converts Bangla digits (০–৯) and removes spaces/dashes before sending, so the same child always has the same ID.
+
+### 7.3 Create a class – `POST /classes`
+
+1. `name` is trimmed; it must be non-empty, at most 200 characters and contain no control characters (NUL, line breaks).
+2. `totalSeats` must be a whole number from 1 to 100 000. Strings, decimals and malformed JSON → `400`.
+3. The class is inserted and returned as `201 { id, name, totalSeats }`.
+
+### 7.4 Seat counts – `GET /classes`, `GET /classes/{classId}`
+
+For every class, in one query:
+
+- `heldSeats` = holds with `status = 'HELD' AND expires_at > now()`
+- `confirmedSeats` = holds with `status = 'CONFIRMED'`
+- `availableSeats` = `totalSeats − heldSeats − confirmedSeats`
+
+`now()` is the **database clock**, so all backend processes agree on time. A hold whose time is up stops counting at that exact moment, even before anything changes its row.
+
+### 7.5 Apply for a seat – `POST /classes/{classId}/holds`
+
+One database transaction, in this order:
+
+1. **Validate** `X-Student-Id` (7.2).
+2. **Lock the student** – `pg_advisory_xact_lock(hash(student_id))`. Two simultaneous applications by the same student are handled one after the other.
+3. **Lock the class row** – `SELECT … FROM classes WHERE id = @id FOR UPDATE`. Every other application for this class waits here. Class not found → `404`.
+4. **Expire stale holds** of this class (`HELD` with `expires_at <= now()` → `EXPIRED`).
+5. **Same class check (rule 3)** – the student already has a `HELD`/`CONFIRMED` hold in this class → `409 ALREADY_APPLIED`.
+6. **Once-a-year check** – the student already has an application **made this year** (any class) that is not expired or cancelled → `409 ALREADY_APPLIED_THIS_YEAR` (with `existingHoldId`, `existingClassName`). Cancelled, expired and last year's applications do not block.
+7. **Capacity check (rule 1)** – `held + confirmed >= totalSeats` → `409 CLASS_FULL`.
+8. **Insert** the hold: `status = 'HELD'`, `expires_at = now() + HOLD_DURATION_SECONDS`. Commit → `201 { holdId, classId, studentId, status, expiresAt }`.
+9. If the unique index ever fires (safety net) → `409 ALREADY_APPLIED`, never `500`.
+10. The class lock waits at most 5 s (`lock_timeout`); during an extreme rush the request returns `503 SERVER_BUSY` instead of hanging.
+
+Locks are always taken in the same order (student, then class), so there are no deadlocks. Both are PostgreSQL locks, so this works the same with several backend processes.
+
+### 7.6 Read applications – `GET /holds/{holdId}`, `GET /me/holds`
+
+1. `GET /holds/{holdId}` returns `holdId`, `classId`, `status`, `expiresAt` (+ `className`, `createdAt`). It needs no header and therefore does not return `studentId`; hold IDs are random UUIDs.
+2. `GET /me/holds` returns only the caller's applications, newest first.
+3. Both report the **effective status**: a `HELD` hold past `expires_at` is shown as `EXPIRED` immediately.
+
+### 7.7 Pay the fee – `POST /holds/{holdId}/confirm`
+
+1. One conditional statement does the check and the change together:
+   `UPDATE holds SET status = 'CONFIRMED', confirmed_at = now() WHERE id = @id AND student_id = @sid AND status = 'HELD' AND expires_at > now()`.
+2. 1 row changed → `200 { holdId, status: "CONFIRMED" }`.
+3. 0 rows → find out why: unknown hold → `404`; someone else's → `403 NOT_YOUR_APPLICATION`; **already confirmed by this student → `200` again** (idempotent, `confirmedSeats` grows only once – rule 5); cancelled → `409 HOLD_CANCELLED`; expired → `409 HOLD_EXPIRED` (rule 4).
+
+### 7.8 Cancel – `DELETE /holds/{holdId}`
+
+1. Same pattern: `UPDATE … SET status = 'CANCELLED' WHERE id = @id AND student_id = @sid AND status = 'HELD' AND expires_at > now()`.
+2. Changed → `204`, the seat is free immediately. Already cancelled → `204` again.
+3. Someone else's → `403`; confirmed → `409 ALREADY_CONFIRMED`; expired → `409 HOLD_EXPIRED`.
+4. Because confirm and cancel are both conditional on `status = 'HELD'`, a payment and a cancellation arriving at the same moment cannot both succeed.
+
+### 7.9 Expiry (rule 2)
+
+1. **The seat comes back at the exact expiry moment** without any API call, because every count and status check compares `expires_at` with `now()`.
+2. A background job (`HoldExpirySweeper`) runs every 5 s and stores `status = 'EXPIRED'` on timed-out rows, so the table itself is also correct. It survives database errors (logs and retries).
+3. Duration from `HOLD_DURATION_SECONDS` (default 600); an invalid value stops the app at startup with a clear message.
+
+### 7.10 Errors and robustness (rule 7)
+
+1. Every error body is `{ "error": "CODE", "message": "…" }`.
+2. Bad input never produces a `500`: validation → `400`, unknown or non-UUID ids → `404`, wrong owner → `403`, conflicts → `409`, body over 16 KB → `413`.
+3. Database errors are classified: cannot reach the database → `503 DATABASE_UNAVAILABLE`; data the database rejects → `4xx`; anything else is logged as a bug (`500`).
+4. Data lives only in PostgreSQL, so a restart loses nothing (rule 6).
+
+### 7.11 Security
+
+1. CORS allows only the local frontend (`localhost` / `127.0.0.1`, any port) and origins listed in `CORS_ORIGINS`.
+2. All SQL is parameterised (no string concatenation). Security headers: `nosniff`, `X-Frame-Options: DENY`, `no-referrer`, `Cache-Control: no-store`.
+3. The connection string comes only from environment variables or the gitignored `backend/.env`; it is never logged or committed.
+
+### 7.12 Frontend logic
+
+1. **Student box** at the top of every student page: validates 17 digits, converts Bangla digits, saves the ID in `localStorage` – applications are still there after refresh or closing the browser (rule 11). Hidden on the admin page.
+2. **Switching student** resets every page, and the application page only shows an application that belongs to the current student – nothing of the previous student stays on screen.
+3. **Class list** refreshes every 3 s (rule 10): cards with a seat bar, the four numbers, *full* badge. "আবেদন করুন" is disabled when the class is full or the student already has an active application this year (with a notice and a link to it).
+4. **Application page**: countdown computed from the server's `expiresAt` (corrected for a wrong computer clock using the response `Date` header). At zero it shows `EXPIRED` and disables payment **without reloading** (rule 9), then re-checks with the server. The URL contains the hold ID, so refresh reloads it.
+5. **My applications**: the student's applications with live status and remaining time.
+6. **Errors** (seat gone, expired, invalid input, server down) are shown as Bangla messages; network failures never leave a blank page; an error boundary catches unexpected UI errors (rule 12).
+7. Buttons are disabled while their request is running, so a double click sends one request.
+
+### 7.13 Brief rules → where they are implemented and tested
+
+| Rule | Implementation | Tests |
+|---|---|---|
+| 1 Never more holds than seats | class row lock + capacity check (7.5) | `ConcurrencyTests`, `MultiInstanceTests`, `two-process-check.ps1` |
+| 2 Automatic expiry | `expires_at` vs `now()` + sweeper (7.9) | `ExpiryTests`, Playwright step 9 |
+| 3 One active per class | same-class check + `ux_holds_active` (7.5) | `Apply_SameStudentTwice…`, `SameStudentAppliesManyTimesAtOnce…` |
+| 4 Confirm only own unexpired HELD | conditional `UPDATE` (7.7) | `Confirm_OtherStudentsHold…`, `Confirm_ExpiredHold…` |
+| 5 Confirm counts once | idempotent confirm, counts not stored (7.7) | `Confirm_Twice_CountsOnce`, `ConfirmManyTimesAtOnce…` |
+| 6 No data loss on restart | PostgreSQL only | – |
+| 7 Bad input → 4xx | validation + error handler (7.10) | `ClassesApiTests`, `SecurityTests` |
+| 8 Everything from the UI | 4 screens (7.12) | Playwright flow |
+| 9 EXPIRED without reload | client countdown (7.12) | frontend test + Playwright step 9 |
+| 10 Seat counts auto-refresh | 3 s polling | Playwright steps 8, 10 |
+| 11 Survives refresh / browser restart | `localStorage` + `GET /me/holds` | frontend test + Playwright step 5 |
+| 12 Readable errors | Bangla messages, error boundary | `client.test.ts`, `App.test.tsx` |
+| Bonus: two processes | PostgreSQL locks, DB clock | `MultiInstanceTests`, `two-process-check.ps1` |
+| Bonus: frontend tests | Vitest + Playwright | 35 unit/component tests + 1 E2E flow |
+
+## 8. More
 
 - [ASSUMPTIONS.md](ASSUMPTIONS.md) – decisions where the brief was open, and how the bonus works
 - [AI_USAGE.md](AI_USAGE.md) – how AI tools were used

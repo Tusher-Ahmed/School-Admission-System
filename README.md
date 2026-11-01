@@ -136,6 +136,21 @@ cd frontend
 npm test
 ```
 
+### End-to-end (Playwright, real browser + real backend + real database)
+
+One scenario drives the real UI in Chromium against the real API and PostgreSQL, the same way a parent and an admin would: create two classes, invalid input, apply and pay, refresh and reopen the browser, apply and cancel, a full class, a hold expiring on screen, the freed seat taken by someone else, *my applications*, final seat counts.
+
+```bash
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e                  # add --headed to watch it
+npx playwright show-report        # steps, screenshots, video, trace
+```
+
+Playwright starts its own backend on port **8090** (with `HOLD_DURATION_SECONDS=15`) and frontend on **5180**, so it does not clash with an app already running on 8080/5173. The backend needs the database connection (environment variable or `backend/.env`, see section 3).
+
+The data is **kept** so it can be inspected: classes are named `Class 6 - Morning Shift [E2E <timestamp>]` and the console prints the student IDs used. `scripts/cleanup-test-data.sql` removes them.
+
 ## 6. API
 
 Base URL `http://localhost:8080`, JSON everywhere, student identity in the `X-Student-Id` header (exactly 17 digits).

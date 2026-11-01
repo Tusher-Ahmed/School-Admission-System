@@ -5,12 +5,14 @@ import { ClassListPage } from './pages/ClassListPage';
 import { CreateClassPage } from './pages/CreateClassPage';
 import { HoldPage } from './pages/HoldPage';
 import { MyHoldsPage } from './pages/MyHoldsPage';
+import { useStudent } from './student/StudentContext';
 
 // The admin page has nothing to do with a student, so the student ID box is not shown there.
 const ADMIN_PATHS = ['/classes/new'];
 
 export default function App() {
   const { pathname } = useLocation();
+  const { studentId } = useStudent();
   const isAdminPage = ADMIN_PATHS.includes(pathname);
 
   return (
@@ -45,7 +47,9 @@ export default function App() {
 
       <main className="container">
         {!isAdminPage && <StudentBar />}
-        <Routes>
+        {/* Keyed by student: switching student remounts the page, so no data, message or error
+            of the previous student can stay on screen. */}
+        <Routes key={studentId ?? 'no-student'}>
           <Route path="/" element={<ClassListPage />} />
           <Route path="/classes/new" element={<CreateClassPage />} />
           <Route path="/holds/:holdId" element={<HoldPage />} />

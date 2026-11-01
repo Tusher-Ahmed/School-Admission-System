@@ -126,7 +126,7 @@ describe('application page', () => {
 
   it('switches to EXPIRED and disables payment when the countdown ends, without a reload', async () => {
     const held = hold('HELD', 1200);
-    mockFetch(() => json(held));
+    mockFetch((url) => (url.endsWith('/me/holds') ? json([held]) : json(held)));
     renderApp('/holds/h1', STUDENT);
 
     expect(await screen.findByTestId('countdown')).toBeInTheDocument();
@@ -144,6 +144,7 @@ describe('application page', () => {
         status = 'CONFIRMED';
         return json({ holdId: 'h1', status: 'CONFIRMED' });
       }
+      if (url.endsWith('/me/holds')) return json([hold(status, 600_000)]);
       return json({ ...hold(status, 600_000) });
     });
     const user = userEvent.setup();
@@ -159,11 +160,12 @@ describe('application page', () => {
 
   it('cancels after asking for confirmation', async () => {
     let status = 'HELD';
-    mockFetch((_url, init) => {
+    mockFetch((url, init) => {
       if (init.method === 'DELETE') {
         status = 'CANCELLED';
         return new Response(null, { status: 204 });
       }
+      if (url.endsWith('/me/holds')) return json([hold(status, 600_000)]);
       return json(hold(status, 600_000));
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -173,6 +175,33 @@ describe('application page', () => {
     await user.click(await screen.findByRole('button', { name: 'বাতিল' }));
 
     await waitFor(() => expect(screen.getByTestId('hold-status')).toHaveTextContent('CANCELLED'));
+  });
+  it('does not show another student’s application', async () => {
+    mockFetch((url) => (url.endsWith('/me/holds') ? json([]) : json(hold('HELD', 600_000))));
+    renderApp('/holds/h1', STUDENT);
+
+    expect(await screen.findByText(/বর্তমান শিক্ষার্থীর নয়/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ভর্তি ফি দিন' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Class 6 - Morning Shift')).not.toBeInTheDocument();
+  });
+
+  it('hides the application right after switching to another student', async () => {
+    const OTHER = '20150000000099999';
+    mockFetch((url, init) => {
+      if (!url.endsWith('/me/holds')) return json(hold('HELD', 600_000));
+      const sid = (init.headers as Record<string, string>)['X-Student-Id'];
+      return json(sid === STUDENT ? [hold('HELD', 600_000)] : []);
+    });
+    const user = userEvent.setup();
+    renderApp('/holds/h1', STUDENT);
+    expect(await screen.findByRole('button', { name: 'ভর্তি ফি দিন' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'পরিবর্তন করুন' }));
+    await user.type(screen.getByLabelText(/জন্ম নিবন্ধন নম্বর/), OTHER);
+    await user.click(screen.getByRole('button', { name: 'ব্যবহার করুন' }));
+
+    expect(await screen.findByText(/বর্তমান শিক্ষার্থীর নয়/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ভর্তি ফি দিন' })).not.toBeInTheDocument();
   });
 });
 

@@ -69,6 +69,18 @@ export function HoldPage() {
   const { data, error, loading, reload } = usePolling(load, REFRESH_MS);
   const hold = override ?? data;
 
+  // Only show the application to the student it belongs to (checked against their own list), so switching
+  // student never leaves someone else's application on screen.
+  const loadMine = useCallback(() => api.myHolds(studentId!), [studentId]);
+  const mine = usePolling(studentId ? loadMine : null, REFRESH_MS);
+  const ownership: 'mine' | 'other' | 'unknown' = !studentId
+    ? 'other'
+    : mine.data
+      ? mine.data.some((h) => h.holdId === holdId)
+        ? 'mine'
+        : 'other'
+      : 'unknown';
+
   useEffect(() => setOverride(null), [data]);
 
   const status = hold ? effectiveStatus(hold, now) : null;
@@ -120,6 +132,26 @@ export function HoldPage() {
     }
   }
 
+  if (ownership !== 'mine' && !(error instanceof ApiError && error.status === 404)) {
+    return (
+      <section className="page">
+        {ownership === 'unknown' && mine.error == null && <Spinner />}
+        {mine.error != null && <Alert kind="error">{toUserMessage(mine.error)}</Alert>}
+        {ownership === 'other' && (
+          <Alert kind="info">
+            {studentId
+              ? 'এই আবেদনটি বর্তমান শিক্ষার্থীর নয়। এই শিক্ষার্থীর আবেদনগুলো "আমার আবেদন" পাতায় দেখুন।'
+              : 'আবেদনটি দেখতে উপরে শিক্ষার্থীর জন্ম নিবন্ধন নম্বর দিন।'}
+          </Alert>
+        )}
+        <div className="link-row">
+          <Link to="/me">আমার আবেদন</Link>
+          <Link to="/">শ্রেণি তালিকা</Link>
+        </div>
+      </section>
+    );
+  }
+
   if (!hold || !status) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
@@ -143,9 +175,6 @@ export function HoldPage() {
       {notice && <Alert kind="success">{notice}</Alert>}
       {actionError && <Alert kind="error">{actionError}</Alert>}
       {error != null && <Alert kind="error">{toUserMessage(error)}</Alert>}
-      {!studentId && status === 'HELD' && (
-        <Alert kind="info">ফি দিতে বা বাতিল করতে উপরে শিক্ষার্থীর জন্ম নিবন্ধন নম্বর দিন।</Alert>
-      )}
 
       <div className={`hold-card status-${status.toLowerCase()}`}>
         <div className="hold-banner">

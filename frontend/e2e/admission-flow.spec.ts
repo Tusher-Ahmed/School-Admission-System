@@ -57,7 +57,10 @@ test('full admission flow on real backend and database', async ({ page, browser 
     await page.getByLabel('আসন সংখ্যা').fill('0');
     await page.getByRole('button', { name: 'শ্রেণি তৈরি করুন' }).click();
     await expect(page.getByRole('alert')).toContainText('আসন সংখ্যা ১ থেকে');
+    // The student ID box is not shown on the admin page.
+    await expect(page.getByLabel('শিক্ষার্থীর জন্ম নিবন্ধন নম্বর (১৭ অঙ্ক)')).toHaveCount(0);
 
+    await nav(page, 'শ্রেণি তালিকা');
     await page.getByLabel('শিক্ষার্থীর জন্ম নিবন্ধন নম্বর (১৭ অঙ্ক)').fill('12345');
     await page.getByRole('button', { name: 'ব্যবহার করুন' }).click();
     await expect(page.locator('#student-id-error')).toContainText('১৭ অঙ্কের');

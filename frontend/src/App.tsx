@@ -1,11 +1,17 @@
-import { Link, NavLink, Route, Routes } from 'react-router-dom';
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { StudentBar } from './components/StudentBar';
 import { ClassListPage } from './pages/ClassListPage';
 import { CreateClassPage } from './pages/CreateClassPage';
 import { HoldPage } from './pages/HoldPage';
 import { MyHoldsPage } from './pages/MyHoldsPage';
 
+// The admin page has nothing to do with a student, so the student ID box is not shown there.
+const ADMIN_PATHS = ['/classes/new'];
+
 export default function App() {
+  const { pathname } = useLocation();
+  const isAdminPage = ADMIN_PATHS.includes(pathname);
+
   return (
     <>
       <header className="header">
@@ -21,7 +27,7 @@ export default function App() {
             <NavLink to="/classes/new">নতুন শ্রেণি (এডমিন)</NavLink>
           </nav>
         </div>
-        <StudentBar />
+        {!isAdminPage && <StudentBar />}
       </header>
 
       <main>

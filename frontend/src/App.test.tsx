@@ -19,6 +19,14 @@ describe('student ID box', () => {
     expect(window.localStorage.getItem('school-admission.studentId')).toBe(STUDENT);
   });
 
+  it('is not shown on the admin page', () => {
+    renderApp('/classes/new', STUDENT);
+
+    expect(screen.getByRole('heading', { name: /নতুন শ্রেণি তৈরি/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/জন্ম নিবন্ধন নম্বর/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('current-student')).not.toBeInTheDocument();
+  });
+
   it('rejects a number that is not 17 digits', async () => {
     mockFetch(() => json([]));
     const user = userEvent.setup();

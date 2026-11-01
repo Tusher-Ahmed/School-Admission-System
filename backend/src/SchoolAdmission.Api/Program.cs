@@ -16,7 +16,9 @@ builder.Services.AddScoped<HoldService>();
 builder.Services.AddHostedService<HoldExpirySweeper>();
 
 // The React app runs on another port, so the browser needs CORS. X-Student-Id is a custom header.
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+// Date is exposed so the UI can correct its countdown for a browser clock that is off.
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Date")));
 
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();

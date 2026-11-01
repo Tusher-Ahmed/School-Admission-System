@@ -13,6 +13,7 @@ builder.Services.AddSingleton(sp => AdmissionOptions.FromConfiguration(sp.GetReq
 builder.Services.AddDbContext<AdmissionDbContext>((sp, o) =>
     o.UseNpgsql(DatabaseConfig.GetConnectionString(sp.GetRequiredService<IConfiguration>())));
 builder.Services.AddScoped<HoldService>();
+builder.Services.AddHostedService<HoldExpirySweeper>();
 
 // The React app runs on another port, so the browser needs CORS. X-Student-Id is a custom header.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));

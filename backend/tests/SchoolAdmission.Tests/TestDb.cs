@@ -10,12 +10,27 @@ public static class TestDb
 {
     public static async Task ExpireNowAsync(this ApiFactory factory, Guid holdId)
     {
-        var connectionString = DatabaseConfig.GetConnectionString(factory.Services.GetRequiredService<IConfiguration>());
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
+        await using var conn = await OpenAsync(factory);
         await using var cmd = new NpgsqlCommand(
             "UPDATE holds SET expires_at = now() - interval '1 second' WHERE id = @id", conn);
         cmd.Parameters.AddWithValue("id", holdId);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>The status column exactly as stored (not the effective status the API computes).</summary>
+    public static async Task<string> StoredStatusAsync(this ApiFactory factory, Guid holdId)
+    {
+        await using var conn = await OpenAsync(factory);
+        await using var cmd = new NpgsqlCommand("SELECT status FROM holds WHERE id = @id", conn);
+        cmd.Parameters.AddWithValue("id", holdId);
+        return (string)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<NpgsqlConnection> OpenAsync(ApiFactory factory)
+    {
+        var connectionString = DatabaseConfig.GetConnectionString(factory.Services.GetRequiredService<IConfiguration>());
+        var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+        return conn;
     }
 }

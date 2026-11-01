@@ -10,6 +10,46 @@ public static class HoldEndpoints
         app.MapPost("/classes/{classId:guid}/holds", Apply).RequireStudentId();
         app.MapGet("/holds/{holdId:guid}", GetHold);
         app.MapGet("/me/holds", MyHolds).RequireStudentId();
+        app.MapPost("/holds/{holdId:guid}/confirm", Confirm).RequireStudentId();
+        app.MapDelete("/holds/{holdId:guid}", Cancel).RequireStudentId();
+    }
+
+    private static async Task<IResult> Confirm(Guid holdId, HttpContext http, HoldService holds, ILoggerFactory loggers, CancellationToken ct)
+    {
+        try
+        {
+            var result = await holds.ConfirmAsync(holdId, http.GetStudentId(), ct);
+            if (result.Outcome != HoldOutcome.Ok)
+                return ToError(result.Outcome);
+
+            var h = result.Hold!;
+            return Results.Ok(new
+            {
+                holdId = h.HoldId,
+                status = StatusText(h.Status),
+                classId = h.ClassId,
+                confirmedAt = h.ConfirmedAt,
+            });
+        }
+        catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
+        {
+            loggers.CreateLogger("Holds").LogWarning(ex, "Could not confirm hold {HoldId}", holdId);
+            return ApiErrors.DatabaseUnavailable();
+        }
+    }
+
+    private static async Task<IResult> Cancel(Guid holdId, HttpContext http, HoldService holds, ILoggerFactory loggers, CancellationToken ct)
+    {
+        try
+        {
+            var result = await holds.CancelAsync(holdId, http.GetStudentId(), ct);
+            return result.Outcome == HoldOutcome.Ok ? Results.NoContent() : ToError(result.Outcome);
+        }
+        catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
+        {
+            loggers.CreateLogger("Holds").LogWarning(ex, "Could not cancel hold {HoldId}", holdId);
+            return ApiErrors.DatabaseUnavailable();
+        }
     }
 
     private static async Task<IResult> Apply(Guid classId, HttpContext http, HoldService holds, ILoggerFactory loggers, CancellationToken ct)

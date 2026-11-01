@@ -82,6 +82,47 @@ public class HoldService(AdmissionDbContext db, AdmissionOptions options)
         return new HoldResult(HoldOutcome.Ok, await FindAsync(holdId, ct));
     }
 
+    /// <summary>
+    /// Pays the fee (rules 4 and 5). One conditional UPDATE does the check and the change together, so ownership,
+    /// status and expiry cannot change in between. Repeating confirm on an already confirmed own hold returns Ok
+    /// without changing anything, so confirmedSeats only ever goes up once.
+    /// </summary>
+    public async Task<HoldResult> ConfirmAsync(Guid holdId, string studentId, CancellationToken ct)
+    {
+        var updated = await db.Database.ExecuteSqlAsync(
+            $"""
+            UPDATE holds SET status = 'CONFIRMED', confirmed_at = now()
+            WHERE id = {holdId} AND student_id = {studentId} AND status = 'HELD' AND expires_at > now()
+            """, ct);
+
+        var hold = await FindAsync(holdId, ct);
+        if (hold is null) return new HoldResult(HoldOutcome.HoldNotFound);
+        if (hold.StudentId != studentId) return new HoldResult(HoldOutcome.NotOwner);
+        if (updated == 1 || hold.Status == HoldStatus.Confirmed) return new HoldResult(HoldOutcome.Ok, hold);
+
+        return new HoldResult(hold.Status == HoldStatus.Cancelled ? HoldOutcome.Cancelled : HoldOutcome.Expired);
+    }
+
+    /// <summary>
+    /// Cancels the student's own HELD hold; the seat is free immediately. Cancelling twice is fine (Ok again).
+    /// A confirmed admission cannot be cancelled here, and an expired hold has nothing left to cancel.
+    /// </summary>
+    public async Task<HoldResult> CancelAsync(Guid holdId, string studentId, CancellationToken ct)
+    {
+        var updated = await db.Database.ExecuteSqlAsync(
+            $"""
+            UPDATE holds SET status = 'CANCELLED', cancelled_at = now()
+            WHERE id = {holdId} AND student_id = {studentId} AND status = 'HELD' AND expires_at > now()
+            """, ct);
+
+        var hold = await FindAsync(holdId, ct);
+        if (hold is null) return new HoldResult(HoldOutcome.HoldNotFound);
+        if (hold.StudentId != studentId) return new HoldResult(HoldOutcome.NotOwner);
+        if (updated == 1 || hold.Status == HoldStatus.Cancelled) return new HoldResult(HoldOutcome.Ok, hold);
+
+        return new HoldResult(hold.Status == HoldStatus.Confirmed ? HoldOutcome.AlreadyConfirmed : HoldOutcome.Expired);
+    }
+
     public async Task<HoldView?> FindAsync(Guid holdId, CancellationToken ct)
     {
         var row = await Views(db.Holds.Where(h => h.Id == holdId)).SingleOrDefaultAsync(ct);

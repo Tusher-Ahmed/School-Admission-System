@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolAdmission.Api.Data;
 using SchoolAdmission.Api.Features.Classes;
+using SchoolAdmission.Api.Features.Holds;
 using SchoolAdmission.Api.Infrastructure;
 
 DotEnv.Load();
@@ -11,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(sp => AdmissionOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddDbContext<AdmissionDbContext>((sp, o) =>
     o.UseNpgsql(DatabaseConfig.GetConnectionString(sp.GetRequiredService<IConfiguration>())));
+builder.Services.AddScoped<HoldService>();
 
 // The React app runs on another port, so the browser needs CORS. X-Student-Id is a custom header.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
@@ -35,6 +37,7 @@ app.MapGet("/health", async (AdmissionDbContext db) =>
         : Results.Json(new { status = "degraded", database = "unreachable" }, statusCode: 503));
 
 app.MapClassEndpoints();
+app.MapHoldEndpoints();
 
 app.Run();
 

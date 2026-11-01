@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useStudent } from '../student/StudentContext';
 import { isValidStudentId, normalizeStudentId } from '../student/studentId';
+import { UserIcon } from './icons';
 
-/** The box at the top of every page: the student's birth registration number is their identity. */
+/** The student's birth registration number is their identity (no login). Shown at the top of student pages. */
 export function StudentBar() {
   const { studentId, setStudentId } = useStudent();
   const [draft, setDraft] = useState('');
@@ -22,11 +23,17 @@ export function StudentBar() {
 
   if (studentId) {
     return (
-      <div className="student-bar">
-        <span>
-          শিক্ষার্থীর জন্ম নিবন্ধন নম্বর: <strong data-testid="current-student">{studentId}</strong>
+      <div className="student-bar student-bar-set">
+        <span className="avatar">
+          <UserIcon />
         </span>
-        <button type="button" className="secondary" onClick={() => setStudentId(null)}>
+        <div className="student-info">
+          <span className="student-label">শিক্ষার্থীর জন্ম নিবন্ধন নম্বর:</span>
+          <strong className="student-id" data-testid="current-student">
+            {studentId}
+          </strong>
+        </div>
+        <button type="button" className="button ghost" onClick={() => setStudentId(null)}>
           পরিবর্তন করুন
         </button>
       </div>
@@ -35,23 +42,36 @@ export function StudentBar() {
 
   return (
     <form className="student-bar" onSubmit={submit} noValidate>
-      <label htmlFor="student-id">শিক্ষার্থীর জন্ম নিবন্ধন নম্বর (১৭ অঙ্ক)</label>
-      <input
-        id="student-id"
-        inputMode="numeric"
-        autoComplete="off"
-        placeholder="যেমন: 20152691234567890"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        aria-invalid={error !== null}
-        aria-describedby={error ? 'student-id-error' : undefined}
-      />
-      <button type="submit">ব্যবহার করুন</button>
-      {error && (
-        <span id="student-id-error" className="field-error" role="alert">
-          {error}
-        </span>
-      )}
+      <span className="avatar muted-avatar">
+        <UserIcon />
+      </span>
+      <div className="student-form">
+        <label htmlFor="student-id">শিক্ষার্থীর জন্ম নিবন্ধন নম্বর (১৭ অঙ্ক)</label>
+        <div className="input-row">
+          <input
+            id="student-id"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="যেমন: 20152691234567890"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-invalid={error !== null}
+            aria-describedby={error ? 'student-id-error' : 'student-id-hint'}
+          />
+          <button type="submit" className="button">
+            ব্যবহার করুন
+          </button>
+        </div>
+        {error ? (
+          <span id="student-id-error" className="field-error" role="alert">
+            {error}
+          </span>
+        ) : (
+          <span id="student-id-hint" className="field-hint">
+            বাংলা বা ইংরেজি অঙ্কে লিখতে পারেন। নম্বরটি এই ব্রাউজারে মনে রাখা হবে।
+          </span>
+        )}
+      </div>
     </form>
   );
 }

@@ -1,4 +1,5 @@
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { FileIcon, ListIcon, PlusIcon, SchoolIcon } from './components/icons';
 import { StudentBar } from './components/StudentBar';
 import { ClassListPage } from './pages/ClassListPage';
 import { CreateClassPage } from './pages/CreateClassPage';
@@ -13,24 +14,37 @@ export default function App() {
   const isAdminPage = ADMIN_PATHS.includes(pathname);
 
   return (
-    <>
+    <div className="app">
       <header className="header">
-        <div className="header-inner">
+        <div className="container header-inner">
           <Link to="/" className="brand">
-            স্কুল ভর্তি
+            <span className="brand-logo">
+              <SchoolIcon />
+            </span>
+            <span>
+              <span className="brand-title">স্কুল ভর্তি</span>
+              <span className="brand-sub">অনলাইন ভর্তি ব্যবস্থা</span>
+            </span>
           </Link>
           <nav>
             <NavLink to="/" end>
+              <ListIcon />
               শ্রেণি তালিকা
             </NavLink>
-            <NavLink to="/me">আমার আবেদন</NavLink>
-            <NavLink to="/classes/new">নতুন শ্রেণি (এডমিন)</NavLink>
+            <NavLink to="/me">
+              <FileIcon />
+              আমার আবেদন
+            </NavLink>
+            <NavLink to="/classes/new">
+              <PlusIcon />
+              নতুন শ্রেণি (এডমিন)
+            </NavLink>
           </nav>
         </div>
-        {!isAdminPage && <StudentBar />}
       </header>
 
-      <main>
+      <main className="container">
+        {!isAdminPage && <StudentBar />}
         <Routes>
           <Route path="/" element={<ClassListPage />} />
           <Route path="/classes/new" element={<CreateClassPage />} />
@@ -39,14 +53,20 @@ export default function App() {
           <Route
             path="*"
             element={
-              <section className="page">
+              <section className="page empty-state">
                 <h1>পেজটি পাওয়া যায়নি</h1>
-                <Link to="/">শ্রেণি তালিকায় ফিরে যান</Link>
+                <Link to="/" className="button">
+                  শ্রেণি তালিকায় ফিরে যান
+                </Link>
               </section>
             }
           />
         </Routes>
       </main>
-    </>
+
+      <footer className="footer">
+        <div className="container">আগে আবেদন করলে আগে পাবে · আসন সীমিত</div>
+      </footer>
+    </div>
   );
 }

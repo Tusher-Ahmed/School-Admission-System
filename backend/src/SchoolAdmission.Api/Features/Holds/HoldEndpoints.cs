@@ -69,6 +69,7 @@ public static class HoldEndpoints
                 status = StatusText(h.Status),
                 expiresAt = h.ExpiresAt,
                 className = h.ClassName,
+                createdAt = h.CreatedAt,
             });
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
@@ -94,6 +95,7 @@ public static class HoldEndpoints
                 status = StatusText(h.Status),
                 expiresAt = h.ExpiresAt,
                 className = h.ClassName,
+                createdAt = h.CreatedAt,
             });
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))

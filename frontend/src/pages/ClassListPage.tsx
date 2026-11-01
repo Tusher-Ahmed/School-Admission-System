@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, toUserMessage } from '../api/client';
-import { Alert } from '../components/common';
+import { Alert, PageHeader, SeatBar, Spinner } from '../components/common';
+import { ArrowIcon, ListIcon, SeatIcon } from '../components/icons';
 import { effectiveStatus } from '../holds/holdTime';
 import { usePolling } from '../hooks/usePolling';
 import { useServerNow } from '../hooks/useServerNow';
@@ -44,67 +45,123 @@ export function ClassListPage() {
     }
   }
 
+  const list = classes.data ?? [];
+  const totals = list.reduce(
+    (t, c) => ({ seats: t.seats + c.totalSeats, available: t.available + c.availableSeats }),
+    { seats: 0, available: 0 },
+  );
+
   return (
     <section className="page">
-      <h1>শ্রেণি তালিকা</h1>
+      <PageHeader
+        icon={<ListIcon />}
+        title="শ্রেণি তালিকা"
+        subtitle={
+          <>
+            <span className="live-dot" aria-hidden="true" /> আসনের হিসাব প্রতি {REFRESH_MS / 1000} সেকেন্ডে নিজে থেকে
+            হালনাগাদ হয়
+          </>
+        }
+      />
 
       {!studentId && <Alert kind="info">আবেদন করতে আগে উপরে শিক্ষার্থীর জন্ম নিবন্ধন নম্বর দিন।</Alert>}
       {actionError && <Alert kind="error">{actionError}</Alert>}
       {classes.error != null && <Alert kind="error">{toUserMessage(classes.error)}</Alert>}
 
-      {classes.loading && !classes.data && <p className="muted">লোড হচ্ছে…</p>}
+      {classes.loading && !classes.data && <Spinner />}
 
-      {classes.data && classes.data.length === 0 && (
-        <Alert kind="info">
-          এখনও কোনো শ্রেণি তৈরি হয়নি। <Link to="/classes/new">নতুন শ্রেণি তৈরি করুন</Link>।
-        </Alert>
-      )}
-
-      {classes.data && classes.data.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>শ্রেণি</th>
-                <th className="num">মোট আসন</th>
-                <th className="num">hold-এ আছে</th>
-                <th className="num">নিশ্চিত</th>
-                <th className="num">খালি</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {classes.data.map((c) => {
-                const active = activeByClass.get(c.id);
-                return (
-                  <tr key={c.id}>
-                    <td>{c.name}</td>
-                    <td className="num">{c.totalSeats}</td>
-                    <td className="num">{c.heldSeats}</td>
-                    <td className="num">{c.confirmedSeats}</td>
-                    <td className={`num ${c.availableSeats === 0 ? 'full' : ''}`}>{c.availableSeats}</td>
-                    <td className="actions">
-                      {active ? (
-                        <Link to={`/holds/${active.holdId}`}>আবেদন দেখুন</Link>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void apply(c.id)}
-                          disabled={!studentId || applyingTo !== null || c.availableSeats === 0}
-                          title={c.availableSeats === 0 ? 'কোনো আসন খালি নেই' : undefined}
-                        >
-                          {applyingTo === c.id ? 'আবেদন হচ্ছে…' : c.availableSeats === 0 ? 'আসন নেই' : 'আবেদন করুন'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {list.length > 0 && (
+        <div className="stats">
+          <div className="stat">
+            <span className="stat-value">{list.length}</span>
+            <span className="stat-label">শ্রেণি / shift</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{totals.seats}</span>
+            <span className="stat-label">মোট আসন</span>
+          </div>
+          <div className="stat stat-accent">
+            <span className="stat-value">{totals.available}</span>
+            <span className="stat-label">এখন খালি</span>
+          </div>
         </div>
       )}
-      <p className="muted small">আসনের হিসাব প্রতি {REFRESH_MS / 1000} সেকেন্ডে নিজে থেকে হালনাগাদ হয়।</p>
+
+      {classes.data && list.length === 0 && (
+        <div className="empty-state card">
+          <SeatIcon className="empty-icon" />
+          <p>এখনও কোনো শ্রেণি তৈরি হয়নি।</p>
+          <Link to="/classes/new" className="button">
+            নতুন শ্রেণি তৈরি করুন
+          </Link>
+        </div>
+      )}
+
+      <div className="class-grid">
+        {list.map((c) => {
+          const active = activeByClass.get(c.id);
+          const full = c.availableSeats === 0;
+          return (
+            <article key={c.id} className={`class-card ${full ? 'is-full' : ''}`} data-testid="class-card">
+              <div className="class-card-head">
+                <h2 className="class-name" data-testid="class-name">
+                  {c.name}
+                </h2>
+                {full ? (
+                  <span className="pill pill-danger">পূর্ণ</span>
+                ) : (
+                  <span className="pill pill-success">{c.availableSeats} খালি</span>
+                )}
+              </div>
+
+              <SeatBar total={c.totalSeats} held={c.heldSeats} confirmed={c.confirmedSeats} />
+
+              <dl className="seat-stats">
+                <div>
+                  <dt>মোট আসন</dt>
+                  <dd data-testid="seats-total">{c.totalSeats}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <span className="legend legend-held" /> hold-এ আছে
+                  </dt>
+                  <dd data-testid="seats-held">{c.heldSeats}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <span className="legend legend-confirmed" /> নিশ্চিত
+                  </dt>
+                  <dd data-testid="seats-confirmed">{c.confirmedSeats}</dd>
+                </div>
+                <div>
+                  <dt>খালি</dt>
+                  <dd data-testid="seats-available" className={full ? 'text-danger' : 'text-success'}>
+                    {c.availableSeats}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="class-card-foot">
+                {active ? (
+                  <Link to={`/holds/${active.holdId}`} className="button secondary block">
+                    আবেদন দেখুন <ArrowIcon />
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className="button block"
+                    onClick={() => void apply(c.id)}
+                    disabled={!studentId || applyingTo !== null || full}
+                    title={full ? 'কোনো আসন খালি নেই' : undefined}
+                  >
+                    {applyingTo === c.id ? 'আবেদন হচ্ছে…' : full ? 'আসন নেই' : 'আবেদন করুন'}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -59,10 +59,16 @@ describe('class list', () => {
     );
     renderApp('/', STUDENT);
 
-    const morning = (await screen.findByText('Class 6 - Morning Shift')).closest('tr')!;
-    expect(within(morning).getByText('25')).toBeInTheDocument();
+    const card = (name: string) => screen.getByText(name).closest<HTMLElement>('[data-testid="class-card"]')!;
+    await screen.findByText('Class 6 - Morning Shift');
+    const morning = card('Class 6 - Morning Shift');
+    expect(within(morning).getByTestId('seats-total')).toHaveTextContent('120');
+    expect(within(morning).getByTestId('seats-held')).toHaveTextContent('15');
+    expect(within(morning).getByTestId('seats-confirmed')).toHaveTextContent('80');
+    expect(within(morning).getByTestId('seats-available')).toHaveTextContent('25');
     expect(within(morning).getByRole('button', { name: 'আবেদন করুন' })).toBeEnabled();
-    const day = screen.getByText('Class 6 - Day Shift').closest('tr')!;
+    const day = card('Class 6 - Day Shift');
+    expect(within(day).getByText('পূর্ণ')).toBeInTheDocument();
     expect(within(day).getByRole('button', { name: 'আসন নেই' })).toBeDisabled();
   });
 

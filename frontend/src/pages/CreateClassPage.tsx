@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, toUserMessage } from '../api/client';
 import type { CreatedClass } from '../api/types';
-import { Alert } from '../components/common';
+import { Alert, PageHeader } from '../components/common';
+import { PlusIcon } from '../components/icons';
 
 const MAX_SEATS = 100000;
 
@@ -40,9 +41,12 @@ export function CreateClassPage() {
   }
 
   return (
-    <section className="page">
-      <h1>নতুন শ্রেণি তৈরি (স্কুল এডমিন)</h1>
-      <p className="muted">প্রতিটি shift আলাদা শ্রেণি, যেমন "Class 6 - Morning Shift" আর "Class 6 - Day Shift"।</p>
+    <section className="page narrow">
+      <PageHeader
+        icon={<PlusIcon />}
+        title="নতুন শ্রেণি তৈরি (স্কুল এডমিন)"
+        subtitle='প্রতিটি shift আলাদা শ্রেণি, যেমন "Class 6 - Morning Shift" আর "Class 6 - Day Shift"।'
+      />
 
       {created && (
         <Alert kind="success">
@@ -51,30 +55,37 @@ export function CreateClassPage() {
       )}
       {error && <Alert kind="error">{error}</Alert>}
 
-      <form className="form" onSubmit={submit} noValidate>
-        <label htmlFor="class-name">শ্রেণির নাম</label>
-        <input
-          id="class-name"
-          value={name}
-          maxLength={200}
-          placeholder="Class 6 - Morning Shift"
-          onChange={(e) => setName(e.target.value)}
-        />
+      <form className="card form" onSubmit={submit} noValidate>
+        <div className="field">
+          <label htmlFor="class-name">শ্রেণির নাম</label>
+          <input
+            id="class-name"
+            value={name}
+            maxLength={200}
+            placeholder="Class 6 - Morning Shift"
+            onChange={(e) => setName(e.target.value)}
+          />
+          <span className="field-hint">শ্রেণি ও shift দুটোই নামে লিখুন।</span>
+        </div>
 
-        <label htmlFor="class-seats">আসন সংখ্যা</label>
-        <input
-          id="class-seats"
-          type="number"
-          min={1}
-          max={MAX_SEATS}
-          step={1}
-          inputMode="numeric"
-          placeholder="120"
-          value={seats}
-          onChange={(e) => setSeats(e.target.value)}
-        />
+        <div className="field">
+          <label htmlFor="class-seats">আসন সংখ্যা</label>
+          <input
+            id="class-seats"
+            type="number"
+            min={1}
+            max={MAX_SEATS}
+            step={1}
+            inputMode="numeric"
+            placeholder="120"
+            value={seats}
+            onChange={(e) => setSeats(e.target.value)}
+          />
+          <span className="field-hint">১ থেকে {MAX_SEATS} এর মধ্যে একটি পূর্ণ সংখ্যা।</span>
+        </div>
 
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="button lg" disabled={busy}>
+          <PlusIcon />
           {busy ? 'তৈরি হচ্ছে…' : 'শ্রেণি তৈরি করুন'}
         </button>
       </form>

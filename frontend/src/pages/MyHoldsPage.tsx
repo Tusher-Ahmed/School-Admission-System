@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api, toUserMessage } from '../api/client';
-import { Alert, StatusBadge } from '../components/common';
+import { Alert, PageHeader, Spinner, StatusBadge } from '../components/common';
+import { ArrowIcon, ClockIcon, FileIcon } from '../components/icons';
 import { effectiveStatus, formatDateTime, formatRemaining, remainingMs } from '../holds/holdTime';
 import { usePolling } from '../hooks/usePolling';
 import { useServerNow } from '../hooks/useServerNow';
@@ -19,50 +20,48 @@ export function MyHoldsPage() {
 
   return (
     <section className="page">
-      <h1>আমার আবেদন</h1>
+      <PageHeader icon={<FileIcon />} title="আমার আবেদন" subtitle="এই শিক্ষার্থীর সব আবেদন ও তাদের বর্তমান অবস্থা" />
 
       {!studentId && <Alert kind="info">আপনার আবেদনগুলো দেখতে উপরে শিক্ষার্থীর জন্ম নিবন্ধন নম্বর দিন।</Alert>}
       {error != null && <Alert kind="error">{toUserMessage(error)}</Alert>}
-      {studentId && loading && !data && <p className="muted">লোড হচ্ছে…</p>}
+      {studentId && loading && !data && <Spinner />}
 
       {data && data.length === 0 && (
-        <Alert kind="info">
-          এই শিক্ষার্থীর কোনো আবেদন নেই। <Link to="/">শ্রেণি তালিকা</Link> থেকে আবেদন করুন।
-        </Alert>
+        <div className="empty-state card">
+          <FileIcon className="empty-icon" />
+          <p>এই শিক্ষার্থীর কোনো আবেদন নেই।</p>
+          <Link to="/" className="button">
+            শ্রেণি তালিকা থেকে আবেদন করুন
+          </Link>
+        </div>
       )}
 
       {data && data.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>শ্রেণি</th>
-                <th>অবস্থা</th>
-                <th>বাকি সময়</th>
-                <th>মেয়াদ শেষের সময়</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((h) => {
-                const status = effectiveStatus(h, now);
-                return (
-                  <tr key={h.holdId}>
-                    <td>{h.className ?? h.classId}</td>
-                    <td>
-                      <StatusBadge status={status} />
-                    </td>
-                    <td className="countdown">{status === 'HELD' ? formatRemaining(remainingMs(h, now)) : '—'}</td>
-                    <td>{formatDateTime(h.expiresAt)}</td>
-                    <td className="actions">
-                      <Link to={`/holds/${h.holdId}`}>{status === 'HELD' ? 'ফি দিন / বাতিল' : 'বিস্তারিত'}</Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ul className="hold-list">
+          {data.map((h) => {
+            const status = effectiveStatus(h, now);
+            return (
+              <li key={h.holdId} className={`hold-item status-${status.toLowerCase()}`} data-testid="hold-item">
+                <div className="hold-item-main">
+                  <h2 className="hold-item-title">{h.className ?? h.classId}</h2>
+                  <div className="hold-item-meta">
+                    <StatusBadge status={status} />
+                    {status === 'HELD' ? (
+                      <span className="countdown-chip">
+                        <ClockIcon /> <span className="countdown">{formatRemaining(remainingMs(h, now))}</span> বাকি
+                      </span>
+                    ) : (
+                      <span className="muted small">মেয়াদ: {formatDateTime(h.expiresAt)}</span>
+                    )}
+                  </div>
+                </div>
+                <Link to={`/holds/${h.holdId}`} className={`button ${status === 'HELD' ? '' : 'secondary'}`}>
+                  {status === 'HELD' ? 'ফি দিন / বাতিল' : 'বিস্তারিত'} <ArrowIcon />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

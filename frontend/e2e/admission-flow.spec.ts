@@ -25,10 +25,14 @@ async function useStudent(page: Page, id: string) {
 // Top navigation bar (pages also have links with the same text further down).
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('link', { name, exact: true }).click();
 
-const classRow = (page: Page, name: string) => page.getByRole('row').filter({ hasText: name });
+const classRow = (page: Page, name: string) => page.getByTestId('class-card').filter({ hasText: name });
 
 async function expectSeats(page: Page, name: string, total: number, held: number, confirmed: number, available: number) {
-  await expect(classRow(page, name).getByRole('cell')).toHaveText([name, `${total}`, `${held}`, `${confirmed}`, `${available}`, /.*/]);
+  const card = classRow(page, name);
+  await expect(card.getByTestId('seats-total')).toHaveText(`${total}`);
+  await expect(card.getByTestId('seats-held')).toHaveText(`${held}`);
+  await expect(card.getByTestId('seats-confirmed')).toHaveText(`${confirmed}`);
+  await expect(card.getByTestId('seats-available')).toHaveText(`${available}`);
 }
 
 async function applyTo(page: Page, name: string): Promise<string> {
@@ -95,7 +99,7 @@ test('full admission flow on real backend and database', async ({ page, browser 
     const page2 = await reopened.newPage();
     await page2.goto('/me');
     await expect(page2.getByTestId('current-student')).toHaveText(STUDENT_A);
-    await expect(page2.getByRole('row').filter({ hasText: MORNING })).toContainText('CONFIRMED');
+    await expect(page2.getByTestId('hold-item').filter({ hasText: MORNING })).toContainText('CONFIRMED');
     await reopened.close();
   });
 
@@ -144,11 +148,11 @@ test('full admission flow on real backend and database', async ({ page, browser 
   await test.step('11. My applications lists each student’s own history', async () => {
     await useStudent(page, STUDENT_C);
     await nav(page, 'আমার আবেদন');
-    await expect(page.getByRole('row').filter({ hasText: DAY })).toContainText('EXPIRED');
-    await expect(page.getByRole('row').filter({ hasText: MORNING })).toHaveCount(0);
+    await expect(page.getByTestId('hold-item').filter({ hasText: DAY })).toContainText('EXPIRED');
+    await expect(page.getByTestId('hold-item').filter({ hasText: MORNING })).toHaveCount(0);
 
     await useStudent(page, STUDENT_A);
-    await expect(page.getByRole('row').filter({ hasText: MORNING })).toContainText('CONFIRMED');
+    await expect(page.getByTestId('hold-item').filter({ hasText: MORNING })).toContainText('CONFIRMED');
     expect(holdA).toContain('/holds/');
   });
 

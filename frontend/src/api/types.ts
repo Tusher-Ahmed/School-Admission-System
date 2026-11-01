@@ -22,6 +22,7 @@ export interface Hold {
   studentId?: string;
   status: HoldStatus;
   expiresAt: string;
+  createdAt?: string;
 }
 
 export interface ConfirmResult {

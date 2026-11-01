@@ -19,12 +19,14 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className="page">
+      <div className="container page">
         <div className="alert alert-error" role="alert">
-          <p>দুঃখিত, পেজটি দেখাতে একটি সমস্যা হয়েছে।</p>
-          <button type="button" onClick={() => window.location.reload()}>
-            আবার লোড করুন
-          </button>
+          <div className="alert-body">
+            <p>দুঃখিত, পেজটি দেখাতে একটি সমস্যা হয়েছে।</p>
+            <button type="button" className="button" onClick={() => window.location.reload()}>
+              আবার লোড করুন
+            </button>
+          </div>
         </div>
       </div>
     );

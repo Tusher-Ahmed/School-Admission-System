@@ -66,6 +66,7 @@ If the connection string is missing the app stops at startup with a clear messag
 |---|---|---|
 | `ConnectionStrings__Default` | — (required) | Npgsql connection string |
 | `HOLD_DURATION_SECONDS` | `600` | How long an application holds a seat. Use e.g. `30` to see expiry quickly. |
+| `CORS_ORIGINS` | — | Extra browser origins allowed to call the API, comma separated (e.g. `http://192.168.1.10:5173`). The local frontend on `localhost` / `127.0.0.1` (any port) is always allowed. |
 
 Another port: `dotnet run --project src/SchoolAdmission.Api --urls http://localhost:8081`.
 
@@ -95,7 +96,7 @@ and restart `npm run dev`.
 
 ## 5. Tests
 
-### Backend (xUnit, 77 tests)
+### Backend (xUnit, 95 tests)
 
 The tests host the real API in memory and use the **real PostgreSQL database** from `ConnectionStrings__Default` (same variable or `backend/.env` as above). They never delete data: each test creates its own class named `TEST …` with random student IDs and only checks that data.
 
@@ -128,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File scripts/two-process-check.ps1 -Seats 10
 
 starts the backend on ports 8080 and 8081, sends 60 simultaneous applications split across both, and prints `PASS: exactly 10 holds across two processes.`
 
-### Frontend (Vitest + Testing Library, 32 tests)
+### Frontend (Vitest + Testing Library, 33 tests)
 
 ```bash
 cd frontend
@@ -150,7 +151,7 @@ Base URL `http://localhost:8080`, JSON everywhere, student identity in the `X-St
 | 7 | `DELETE /holds/{holdId}` | 204 (also when repeated) | 400, 403, 404, 409 already confirmed / expired |
 | 8 | `GET /me/holds` | 200 | 400 |
 
-Every error has the body `{ "error": "CODE", "message": "human readable text" }`. If the database is unreachable the API answers `503 DATABASE_UNAVAILABLE`; bad input never causes a 500.
+Every error has the body `{ "error": "CODE", "message": "human readable text" }`. Bad input never causes a 500: invalid values → `400`, request body over 16 KB → `413`. If the database is unreachable the API answers `503 DATABASE_UNAVAILABLE`; if an application waits more than 5 s for the class lock during a rush → `503 SERVER_BUSY` (retry).
 
 Responses contain every field of the brief's contract; a few extra fields are added (`className`, `createdAt`, `confirmedAt`). IDs are UUID strings.
 

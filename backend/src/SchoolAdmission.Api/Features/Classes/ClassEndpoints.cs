@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SchoolAdmission.Api.Data;
 using SchoolAdmission.Api.Infrastructure;
 
@@ -33,6 +33,9 @@ public static class ClassEndpoints
             return ApiErrors.BadRequest("INVALID_NAME", "Class name is required.");
         if (name.Length > MaxNameLength)
             return ApiErrors.BadRequest("INVALID_NAME", $"Class name must be at most {MaxNameLength} characters.");
+        // NUL cannot be stored in PostgreSQL text, and line breaks / escape codes have no place in a class name.
+        if (name.Any(char.IsControl))
+            return ApiErrors.BadRequest("INVALID_NAME", "Class name must not contain control characters or line breaks.");
 
         if (request.TotalSeats is not int seats || seats < 1 || seats > MaxSeats)
             return ApiErrors.BadRequest("INVALID_TOTAL_SEATS", $"totalSeats must be a whole number from 1 to {MaxSeats}.");
@@ -47,8 +50,8 @@ public static class ClassEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Classes").LogWarning(ex, "Could not create class");
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Classes"), ex, "create class");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -61,8 +64,8 @@ public static class ClassEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Classes").LogWarning(ex, "Could not list classes");
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Classes"), ex, "list classes");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -77,8 +80,8 @@ public static class ClassEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Classes").LogWarning(ex, "Could not load class {ClassId}", classId);
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Classes"), ex, $"load class {classId}");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 

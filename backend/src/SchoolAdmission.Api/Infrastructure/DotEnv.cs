@@ -26,13 +26,15 @@ public static class DotEnv
         }
     }
 
-    // Walks up from the start directory so it works from backend/, the project folder and test bin folders.
+    // Walks up from the start directory so it works from backend/, the project folder and test bin folders,
+    // but never above backend/ (the folder with the .sln): an unrelated .env higher up must not be loaded.
     private static string? Find(string start)
     {
         for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, ".env");
             if (File.Exists(candidate)) return candidate;
+            if (File.Exists(Path.Combine(dir.FullName, "SchoolAdmission.sln"))) return null;
         }
         return null;
     }

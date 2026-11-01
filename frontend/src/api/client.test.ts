@@ -34,6 +34,14 @@ describe('api client', () => {
     expect((error as ApiError).message).toContain('সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না');
   });
 
+  it('asks to retry when the server is busy', async () => {
+    mockFetch(() => json({ error: 'SERVER_BUSY', message: 'Too many requests right now.' }, 503));
+
+    const error = await api.apply('c1', '20152691234567890').catch((e: unknown) => e);
+
+    expect((error as ApiError).message).toContain('কয়েক সেকেন্ড পরে আবার চেষ্টা করুন');
+  });
+
   it('handles a non-JSON error body', async () => {
     mockFetch(() => new Response('<html>Bad gateway</html>', { status: 502 }));
 

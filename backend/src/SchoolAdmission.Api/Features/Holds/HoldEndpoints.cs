@@ -33,8 +33,8 @@ public static class HoldEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Holds").LogWarning(ex, "Could not confirm hold {HoldId}", holdId);
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Holds"), ex, $"confirm hold {holdId}");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -47,8 +47,8 @@ public static class HoldEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Holds").LogWarning(ex, "Could not cancel hold {HoldId}", holdId);
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Holds"), ex, $"cancel hold {holdId}");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -73,8 +73,8 @@ public static class HoldEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Holds").LogWarning(ex, "Could not apply for class {ClassId}", classId);
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Holds"), ex, $"apply for class {classId}");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -98,8 +98,8 @@ public static class HoldEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Holds").LogWarning(ex, "Could not load hold {HoldId}", holdId);
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Holds"), ex, $"load hold {holdId}");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 
@@ -120,8 +120,8 @@ public static class HoldEndpoints
         }
         catch (Exception ex) when (ApiErrors.IsDatabaseError(ex))
         {
-            loggers.CreateLogger("Holds").LogWarning(ex, "Could not list holds for student");
-            return ApiErrors.DatabaseUnavailable();
+            ApiErrors.LogDatabaseError(loggers.CreateLogger("Holds"), ex, "list holds for student");
+            return ApiErrors.FromDatabaseError(ex);
         }
     }
 

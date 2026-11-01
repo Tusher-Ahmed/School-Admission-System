@@ -45,6 +45,19 @@ Verified by `ConcurrencyTests`, `MultiInstanceTests` (two separate API instances
 
 Schema creation at startup is guarded by a PostgreSQL advisory lock, so two processes starting at the same moment do not race.
 
+## Security and robustness
+
+- **CORS:** only the local frontend (`localhost` / `127.0.0.1`, any port, so Vite moving to 5174 still works) and origins in `CORS_ORIGINS` may call the API from a browser. Other websites get no CORS headers, so a page open in the parent's browser cannot apply or cancel on their behalf.
+- **Input limits:** request bodies over 16 KB → `413`; class names with control characters (NUL, line breaks, escape codes) → `400`. NUL used to reach PostgreSQL and come back as a misleading `503`.
+- **Database errors are classified:** cannot reach the database → `503 DATABASE_UNAVAILABLE`; data the database rejects → `4xx`; anything else is logged as a bug and returned as `500`.
+- **Rush protection:** the apply transaction waits at most 5 s for the class lock (`lock_timeout`), then answers `503 SERVER_BUSY` instead of holding a pooled connection indefinitely.
+- **Headers:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (seat counts must never come from a cache).
+- **SQL injection:** all SQL uses parameters (EF Core `FromSql` / `ExecuteSql` with interpolated values become `@p` parameters); no SQL is built by string concatenation.
+- **Secrets:** the connection string comes only from environment variables or a gitignored `backend/.env`; the `.env` search never goes above the `backend/` folder. Errors never echo the connection string or stack traces.
+- **Dependencies:** `dotnet list package --vulnerable` and `npm audit --omit=dev` report no known vulnerabilities. `npm audit` still lists moderate issues in `minimatch` 3.x inside ESLint 9, a dev-only lint tool that never runs in the app.
+- **No rate limiting:** a per-IP limit would also throttle the reviewers' automated concurrency tests (many requests from one machine), so it was left out; in production it belongs in front of the API (reverse proxy / gateway).
+- **Privacy:** without login anyone who knows a birth registration number can list that student's applications (`GET /me/holds`). This follows from the brief's "no login" rule; a real system needs authentication.
+
 ## Tests and data
 
 - Backend tests run against the configured PostgreSQL database (no Docker needed). They never delete data; each test creates its own `TEST …` class and random student IDs. `TEST_DB_CONNECTION` can point them at a separate database; `backend/scripts/cleanup-test-data.sql` removes test data.

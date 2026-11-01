@@ -39,6 +39,10 @@ public class HoldService(AdmissionDbContext db, AdmissionOptions options)
         {
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
+            // Under a huge rush, don't let requests queue on the lock forever while holding a pooled connection:
+            // after 5 s the request fails with 503 SERVER_BUSY and the parent can simply retry.
+            await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+
             // 1. Lock the class row. Other applications for this class wait here until we commit.
             var locked = await db.Classes
                 .FromSql($"SELECT * FROM classes WHERE id = {classId} FOR UPDATE")

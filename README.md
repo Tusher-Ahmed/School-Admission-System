@@ -96,7 +96,7 @@ and restart `npm run dev`.
 
 ## 5. Tests
 
-### Backend (xUnit, 95 tests)
+### Backend (xUnit, 101 tests)
 
 The tests host the real API in memory and use the **real PostgreSQL database** from `ConnectionStrings__Default` (same variable or `backend/.env` as above). They never delete data: each test creates its own class named `TEST …` with random student IDs and only checks that data.
 
@@ -129,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File scripts/two-process-check.ps1 -Seats 10
 
 starts the backend on ports 8080 and 8081, sends 60 simultaneous applications split across both, and prints `PASS: exactly 10 holds across two processes.`
 
-### Frontend (Vitest + Testing Library, 33 tests)
+### Frontend (Vitest + Testing Library, 35 tests)
 
 ```bash
 cd frontend
@@ -160,7 +160,7 @@ Base URL `http://localhost:8080`, JSON everywhere, student identity in the `X-St
 | 1 | `POST /classes` | 201 | 400 invalid name / totalSeats / JSON |
 | 2 | `GET /classes` | 200 | |
 | 3 | `GET /classes/{classId}` | 200 | 404 |
-| 4 | `POST /classes/{classId}/holds` | 201 | 400 bad `X-Student-Id`, 404 class, 409 `CLASS_FULL` / `ALREADY_APPLIED` |
+| 4 | `POST /classes/{classId}/holds` | 201 | 400 bad `X-Student-Id`, 404 class, 409 `CLASS_FULL` / `ALREADY_APPLIED` / `ALREADY_APPLIED_THIS_YEAR` (one active application per student per year, see ASSUMPTIONS) |
 | 5 | `GET /holds/{holdId}` | 200 | 404 |
 | 6 | `POST /holds/{holdId}/confirm` | 200 (also when repeated) | 400, 403 not your hold, 404, 409 expired / cancelled |
 | 7 | `DELETE /holds/{holdId}` | 204 (also when repeated) | 400, 403, 404, 409 already confirmed / expired |

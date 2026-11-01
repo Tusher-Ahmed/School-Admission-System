@@ -11,7 +11,9 @@ Decisions where the brief left room, and why.
 
 ## Holds
 
-- **One active application per student per class** = at most one `HELD` or `CONFIRMED` hold. After `CANCELLED` or `EXPIRED` the student may apply to that class again. A student may hold seats in **different** classes at the same time.
+- **One active application per student per class** = at most one `HELD` or `CONFIRMED` hold (rule 3). After `CANCELLED` or `EXPIRED` the student may apply to that class again.
+- **Stricter than the brief, on purpose: one active application per student per year, in any class.** When a student applies, we first check whether they already have an application made **this year** (any class) that is not expired or cancelled (`HELD` and still running, or `CONFIRMED`). If so → `409 ALREADY_APPLIED_THIS_YEAR` (the body also contains `existingHoldId` and `existingClassName`). A real child is admitted to one class and one shift, and this stops one student from blocking seats in many classes during the rush. Once that application is cancelled or has expired, the student can apply elsewhere; next year last year's applications no longer count. The year is the calendar year of `created_at` in the school's time zone (`Asia/Dhaka`) – no extra column is needed. A confirmed admission cannot be cancelled through this API, so after paying the student stays in that class for the year.
+  - Note for automated tests: reusing one student ID for applications to two different classes in the same year gets `409` by design; use a different student ID per class.
 - **Expiry uses the database clock** (`now()`) everywhere, so several backend processes can never disagree about time.
 - A `HELD` hold is treated as `EXPIRED` **the moment** `expires_at` passes: seat counts, `GET /holds`, confirm and cancel all compare with `now()`. A background job additionally stores `status = 'EXPIRED'` every 5 seconds. So the seat returns on time even if the job is late or the app was down.
 - **Confirm is idempotent:** confirming your own already-confirmed hold returns `200` again and does not count twice.
@@ -31,13 +33,15 @@ Decisions where the brief left room, and why.
 
 Applying for a seat is one database transaction:
 
-1. `SELECT … FROM classes WHERE id = @id FOR UPDATE` – **locks the class row**. Every other application for the same class waits here until this transaction ends.
-2. Mark this class's timed-out `HELD` holds as `EXPIRED`.
-3. If the student already has an active hold in the class → `409 ALREADY_APPLIED`.
-4. If `held + confirmed >= totalSeats` → `409 CLASS_FULL`.
-5. Insert the hold with `expires_at = now() + HOLD_DURATION_SECONDS`, commit.
+1. `pg_advisory_xact_lock(hash(student_id))` – **locks the student**. Two simultaneous applications by the same student (e.g. to two different classes) are handled one after the other, so the once-a-year check cannot be raced.
+2. `SELECT … FROM classes WHERE id = @id FOR UPDATE` – **locks the class row**. Every other application for the same class waits here until this transaction ends.
+3. Mark this class's timed-out `HELD` holds as `EXPIRED`.
+4. If the student already has an active hold in the class → `409 ALREADY_APPLIED`.
+5. If the student has an active application this year in another class → `409 ALREADY_APPLIED_THIS_YEAR`.
+6. If `held + confirmed >= totalSeats` → `409 CLASS_FULL`.
+7. Insert the hold with `expires_at = now() + HOLD_DURATION_SECONDS`, commit.
 
-Because the lock is a **PostgreSQL row lock** and not anything in process memory, it works the same for two (or more) backend processes on different ports sharing the database. A partial unique index `ux_holds_active (class_id, student_id) WHERE status IN ('HELD','CONFIRMED')` is a second safety net for rule 3; if it ever fires, the API returns `409`, not `500`.
+Every application takes the locks in the same order (student, then class), so they cannot deadlock. Because both are **PostgreSQL locks** and not anything in process memory, they work the same for two (or more) backend processes on different ports sharing the database. A partial unique index `ux_holds_active (class_id, student_id) WHERE status IN ('HELD','CONFIRMED')` is a second safety net for rule 3; if it ever fires, the API returns `409`, not `500`.
 
 Confirm and cancel are single conditional `UPDATE … WHERE id = @id AND student_id = @sid AND status = 'HELD' AND expires_at > now()` statements, so the check and the change are atomic; a confirm and a cancel racing each other cannot both succeed.
 

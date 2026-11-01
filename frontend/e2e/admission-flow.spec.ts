@@ -103,6 +103,13 @@ test('full admission flow on real backend and database', async ({ page, browser 
     await reopened.close();
   });
 
+  await test.step('5b. Admitted student A cannot apply to another class this year', async () => {
+    await nav(page, 'শ্রেণি তালিকা');
+    await expect(classRow(page, MORNING).getByRole('link', { name: 'আবেদন দেখুন' })).toBeVisible();
+    await expect(classRow(page, DAY).getByRole('button', { name: 'অন্য শ্রেণিতে আবেদন আছে' })).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: 'ভর্তি নিশ্চিত হয়েছে' })).toBeVisible();
+  });
+
   await test.step('6. Student B applies, then cancels; the seat is released', async () => {
     await useStudent(page, STUDENT_B);
     await applyTo(page, MORNING);

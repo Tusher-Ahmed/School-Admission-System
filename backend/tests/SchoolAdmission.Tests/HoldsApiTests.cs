@@ -65,14 +65,15 @@ public class HoldsApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Apply_SameStudentDifferentClasses_IsAllowed()
+    public async Task Apply_SameStudentDifferentClassSameYear_Returns409()
     {
         var student = TestData.NewStudentId();
 
         await _client.ApplyOkAsync(await _client.CreateClassAsync(seats: 2), student);
         var second = await _client.ApplyAsync(await _client.CreateClassAsync(seats: 2), student);
 
-        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("ALREADY_APPLIED_THIS_YEAR", await second.ErrorCodeAsync());
     }
 
     [Theory]
@@ -146,6 +147,7 @@ public class HoldsApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var me = TestData.NewStudentId();
         var other = TestData.NewStudentId();
         var first = await _client.ApplyOkAsync(await _client.CreateClassAsync(seats: 2, "first"), me);
+        await _client.CancelAsync(first.HoldId, me); // one active application per year: cancel before the next
         var second = await _client.ApplyOkAsync(await _client.CreateClassAsync(seats: 2, "second"), me);
         await _client.ApplyOkAsync(await _client.CreateClassAsync(seats: 2), other);
 
@@ -155,7 +157,7 @@ public class HoldsApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.NotNull(mine);
         Assert.Equal([second.HoldId, first.HoldId], mine.Select(h => h.HoldId));
         Assert.All(mine, h => Assert.StartsWith("TEST", h.ClassName));
-        Assert.All(mine, h => Assert.Equal("HELD", h.Status));
+        Assert.Equal(["HELD", "CANCELLED"], mine.Select(h => h.Status));
     }
 
     [Fact]

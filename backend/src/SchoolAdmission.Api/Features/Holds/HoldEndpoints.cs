@@ -57,6 +57,15 @@ public static class HoldEndpoints
         try
         {
             var result = await holds.ApplyAsync(classId, http.GetStudentId(), ct);
+            if (result.Outcome == HoldOutcome.AlreadyAppliedThisYear)
+                return Results.Json(new
+                {
+                    error = "ALREADY_APPLIED_THIS_YEAR",
+                    message = $"This student already has an active application this year ('{result.Existing?.ClassName}'). " +
+                              "It must be cancelled or expire before applying to another class.",
+                    existingHoldId = result.Existing?.HoldId,
+                    existingClassName = result.Existing?.ClassName,
+                }, statusCode: StatusCodes.Status409Conflict);
             if (result.Outcome != HoldOutcome.Ok)
                 return ToError(result.Outcome);
 
@@ -135,6 +144,8 @@ public static class HoldEndpoints
         HoldOutcome.ClassFull => ApiErrors.Conflict("CLASS_FULL", "No seats are available in this class."),
         HoldOutcome.AlreadyApplied => ApiErrors.Conflict("ALREADY_APPLIED",
             "This student already has an active application or a confirmed admission in this class."),
+        HoldOutcome.AlreadyAppliedThisYear => ApiErrors.Conflict("ALREADY_APPLIED_THIS_YEAR",
+            "This student already has an active application this year in another class."),
         HoldOutcome.HoldNotFound => ApiErrors.NotFound("HOLD_NOT_FOUND", "This application does not exist."),
         HoldOutcome.NotOwner => ApiErrors.Forbidden("NOT_YOUR_APPLICATION", "This application belongs to another student."),
         HoldOutcome.Expired => ApiErrors.Conflict("HOLD_EXPIRED", "This application has expired. Please apply again."),

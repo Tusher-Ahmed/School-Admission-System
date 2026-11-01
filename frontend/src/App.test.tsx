@@ -72,6 +72,34 @@ describe('class list', () => {
     expect(within(day).getByRole('button', { name: 'আসন নেই' })).toBeDisabled();
   });
 
+  it('blocks other classes while the student has an active application this year', async () => {
+    const now = new Date();
+    mockFetch((url) =>
+      url.endsWith('/me/holds')
+        ? json([
+            {
+              holdId: 'h1',
+              classId: 'c1',
+              className: 'Class 6 - Morning Shift',
+              status: 'HELD',
+              expiresAt: new Date(now.getTime() + 300_000).toISOString(),
+              createdAt: now.toISOString(),
+            },
+          ])
+        : json([
+            { id: 'c1', name: 'Class 6 - Morning Shift', totalSeats: 5, heldSeats: 1, confirmedSeats: 0, availableSeats: 4 },
+            { id: 'c2', name: 'Class 6 - Day Shift', totalSeats: 5, heldSeats: 0, confirmedSeats: 0, availableSeats: 5 },
+          ]),
+    );
+    renderApp('/', STUDENT);
+
+    const card = (name: string) => screen.getByText(name).closest<HTMLElement>('[data-testid="class-card"]')!;
+    await screen.findByText('Class 6 - Day Shift');
+    expect(await within(card('Class 6 - Morning Shift')).findByRole('link', { name: 'আবেদন দেখুন' })).toBeInTheDocument();
+    expect(within(card('Class 6 - Day Shift')).getByRole('button', { name: 'অন্য শ্রেণিতে আবেদন আছে' })).toBeDisabled();
+    expect(screen.getByText(/চলমান আবেদন আছে/)).toBeInTheDocument();
+  });
+
   it('shows the server reason when applying fails', async () => {
     mockFetch((url, init) => {
       if (init.method === 'POST') return json({ error: 'ALREADY_APPLIED', message: '...' }, 409);

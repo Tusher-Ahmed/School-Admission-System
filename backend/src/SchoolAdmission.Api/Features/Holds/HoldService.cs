@@ -11,6 +11,7 @@ public enum HoldOutcome
     ClassNotFound,
     ClassFull,
     AlreadyApplied,
+    AlreadyAppliedThisYear,
     HoldNotFound,
     NotOwner,
     Expired,
@@ -23,14 +24,20 @@ public record HoldView(
     Guid HoldId, Guid ClassId, string ClassName, string StudentId, HoldStatus Status,
     DateTime ExpiresAt, DateTime CreatedAt, DateTime? ConfirmedAt, DateTime? CancelledAt);
 
-public record HoldResult(HoldOutcome Outcome, HoldView? Hold = null);
+/// <param name="Existing">For AlreadyAppliedThisYear: the student's active application in another class.</param>
+public record HoldResult(HoldOutcome Outcome, HoldView? Hold = null, HoldView? Existing = null);
 
 public class HoldService(AdmissionDbContext db, AdmissionOptions options)
 {
+    /// <summary>The school's time zone decides which calendar year an application belongs to.</summary>
+    public const string SchoolTimeZone = "Asia/Dhaka";
+
     /// <summary>
-    /// Applies for a seat (rules 1 and 3). The class row is locked with SELECT ... FOR UPDATE, so for one class
-    /// only one transaction at a time can count the active holds and insert a new one. The lock lives in
-    /// PostgreSQL, so this also holds across several backend processes.
+    /// Applies for a seat (rules 1 and 3, plus one active application per student per year).
+    /// The student is locked first (advisory lock on the student ID), then the class row (SELECT ... FOR UPDATE).
+    /// So one student's applications are handled one at a time, and for one class only one transaction at a time
+    /// can count the active holds and insert a new one. Both locks live in PostgreSQL, so this also holds across
+    /// several backend processes. Every apply takes the locks in the same order (student, then class): no deadlocks.
     /// </summary>
     public async Task<HoldResult> ApplyAsync(Guid classId, string studentId, CancellationToken ct)
     {
@@ -42,6 +49,10 @@ public class HoldService(AdmissionDbContext db, AdmissionOptions options)
             // Under a huge rush, don't let requests queue on the lock forever while holding a pooled connection:
             // after 5 s the request fails with 503 SERVER_BUSY and the parent can simply retry.
             await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+
+            // 0. Lock this student: two simultaneous applications by the same student (e.g. to two different
+            //    classes) are handled one after the other, so the "one per year" check below cannot be raced.
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({studentId}, 0))", ct);
 
             // 1. Lock the class row. Other applications for this class wait here until we commit.
             var locked = await db.Classes
@@ -62,6 +73,20 @@ public class HoldService(AdmissionDbContext db, AdmissionOptions options)
             // 3. Rule 3: one active application or admission per student per class.
             if (await active.AnyAsync(h => h.StudentId == studentId, ct))
                 return new HoldResult(HoldOutcome.AlreadyApplied);
+
+            // 3b. One active application per student per year, in any class: an application made this year that is
+            //     not expired or cancelled (HELD and still running, or CONFIRMED) blocks applying anywhere else.
+            //     The year is taken from created_at in the school's time zone; last year's applications don't count.
+            var existingThisYear = await db.Database.SqlQuery<Guid>(
+                $"""
+                SELECT id AS "Value" FROM holds
+                WHERE student_id = {studentId}
+                  AND (status = 'CONFIRMED' OR (status = 'HELD' AND expires_at > now()))
+                  AND date_part('year', created_at AT TIME ZONE {SchoolTimeZone})
+                      = date_part('year', now() AT TIME ZONE {SchoolTimeZone})
+                """).ToListAsync(ct);
+            if (existingThisYear.Count > 0)
+                return new HoldResult(HoldOutcome.AlreadyAppliedThisYear, Existing: await FindAsync(existingThisYear[0], ct));
 
             // 4. Rule 1: held + confirmed may never exceed totalSeats.
             if (await active.CountAsync(ct) >= totalSeats)

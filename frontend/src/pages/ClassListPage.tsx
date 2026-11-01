@@ -23,10 +23,13 @@ export function ClassListPage() {
   const mine = usePolling(studentId ? loadMine : null, REFRESH_MS);
 
   // The student's active application per class, to link to it instead of offering "apply" again.
-  const activeByClass = new Map(
-    (mine.data ?? [])
-      .filter((h) => ['HELD', 'CONFIRMED'].includes(effectiveStatus(h, now)))
-      .map((h) => [h.classId, h]),
+  const activeHolds = (mine.data ?? []).filter((h) => ['HELD', 'CONFIRMED'].includes(effectiveStatus(h, now)));
+  const activeByClass = new Map(activeHolds.map((h) => [h.classId, h]));
+
+  // One active application per year: while one exists, other classes cannot be applied to.
+  const thisYear = new Date(now).getFullYear();
+  const activeThisYear = activeHolds.find(
+    (h) => !h.createdAt || new Date(h.createdAt).getFullYear() === thisYear,
   );
 
   async function apply(classId: string) {
@@ -65,6 +68,14 @@ export function ClassListPage() {
       />
 
       {!studentId && <Alert kind="info">আবেদন করতে আগে উপরে শিক্ষার্থীর জন্ম নিবন্ধন নম্বর দিন।</Alert>}
+      {activeThisYear && (
+        <Alert kind="info">
+          {effectiveStatus(activeThisYear, now) === 'CONFIRMED'
+            ? `এই বছরে "${activeThisYear.className}" শ্রেণিতে ভর্তি নিশ্চিত হয়েছে, তাই অন্য শ্রেণিতে আবেদন করা যাবে না।`
+            : `এই বছরে "${activeThisYear.className}" শ্রেণিতে একটি চলমান আবেদন আছে। অন্য শ্রেণিতে আবেদন করতে আগে সেটি বাতিল করুন বা মেয়াদ শেষ হতে দিন।`}{' '}
+          <Link to={`/holds/${activeThisYear.holdId}`}>আবেদনটি দেখুন</Link>
+        </Alert>
+      )}
       {actionError && <Alert kind="error">{actionError}</Alert>}
       {classes.error != null && <Alert kind="error">{toUserMessage(classes.error)}</Alert>}
 
@@ -146,6 +157,10 @@ export function ClassListPage() {
                   <Link to={`/holds/${active.holdId}`} className="button secondary block">
                     আবেদন দেখুন <ArrowIcon />
                   </Link>
+                ) : activeThisYear ? (
+                  <button type="button" className="button block" disabled title="এই বছরে অন্য শ্রেণিতে আবেদন আছে">
+                    অন্য শ্রেণিতে আবেদন আছে
+                  </button>
                 ) : (
                   <button
                     type="button"

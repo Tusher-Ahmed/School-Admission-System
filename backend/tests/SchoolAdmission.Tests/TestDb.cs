@@ -17,6 +17,16 @@ public static class TestDb
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>Pretends the application was made a year ago.</summary>
+    public static async Task MoveToLastYearAsync(this ApiFactory factory, Guid holdId)
+    {
+        await using var conn = await OpenAsync(factory);
+        await using var cmd = new NpgsqlCommand(
+            "UPDATE holds SET created_at = created_at - interval '1 year' WHERE id = @id", conn);
+        cmd.Parameters.AddWithValue("id", holdId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     /// <summary>The status column exactly as stored (not the effective status the API computes).</summary>
     public static async Task<string> StoredStatusAsync(this ApiFactory factory, Guid holdId)
     {

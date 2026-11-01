@@ -20,7 +20,7 @@ public class AdmissionDbContext(DbContextOptions<AdmissionDbContext> options) : 
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.Name).HasColumnName("name");
             e.Property(x => x.TotalSeats).HasColumnName("total_seats");
-            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
         });
 
         modelBuilder.Entity<Hold>(e =>

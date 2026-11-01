@@ -1,19 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolAdmission.Api.Data;
+using SchoolAdmission.Api.Features.Classes;
 using SchoolAdmission.Api.Infrastructure;
 
 DotEnv.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("Default");
-if (string.IsNullOrWhiteSpace(connectionString))
-    throw new InvalidOperationException(
-        "Database connection is not configured. Set the environment variable ConnectionStrings__Default " +
-        "(or put it in backend/.env) - see README.");
-
-builder.Services.AddSingleton(AdmissionOptions.FromConfiguration(builder.Configuration));
-builder.Services.AddDbContext<AdmissionDbContext>(o => o.UseNpgsql(connectionString));
+// Configuration is read through DI so tests can override it; it is validated right after Build().
+builder.Services.AddSingleton(sp => AdmissionOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddDbContext<AdmissionDbContext>((sp, o) =>
+    o.UseNpgsql(DatabaseConfig.GetConnectionString(sp.GetRequiredService<IConfiguration>())));
 
 // The React app runs on another port, so the browser needs CORS. X-Student-Id is a custom header.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
@@ -23,6 +20,9 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+// Fail fast on bad configuration before accepting any request.
+var connectionString = DatabaseConfig.GetConnectionString(app.Configuration);
+app.Services.GetRequiredService<AdmissionOptions>();
 await SchemaInitializer.EnsureSchemaAsync(connectionString);
 
 app.UseExceptionHandler();
@@ -33,6 +33,8 @@ app.MapGet("/health", async (AdmissionDbContext db) =>
     await db.Database.CanConnectAsync()
         ? Results.Ok(new { status = "ok", database = "ok" })
         : Results.Json(new { status = "degraded", database = "unreachable" }, statusCode: 503));
+
+app.MapClassEndpoints();
 
 app.Run();
 

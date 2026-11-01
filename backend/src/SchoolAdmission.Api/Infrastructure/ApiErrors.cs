@@ -16,6 +16,14 @@ public static class ApiErrors
     public static IResult NotFound(string code, string message) => Error(StatusCodes.Status404NotFound, code, message);
     public static IResult Conflict(string code, string message) => Error(StatusCodes.Status409Conflict, code, message);
 
+    public static IResult DatabaseUnavailable() =>
+        Error(StatusCodes.Status503ServiceUnavailable, "DATABASE_UNAVAILABLE",
+            "The database is not reachable right now. Please try again in a moment.");
+
+    /// <summary>True for errors that come from talking to PostgreSQL (server down, timeout, constraint, ...).</summary>
+    public static bool IsDatabaseError(Exception ex) =>
+        ex is Npgsql.NpgsqlException or Microsoft.EntityFrameworkCore.DbUpdateException;
+
     /// <summary>Gives empty error responses (unknown route, wrong method, ...) the standard JSON body.</summary>
     public static Task WriteStatusCodeBody(StatusCodeContext context)
     {
@@ -48,6 +56,13 @@ public class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExcepti
             status = bad.StatusCode;
             code = "BAD_REQUEST";
             message = "The request is not valid. Check that the body is correct JSON with the right field types.";
+        }
+        else if (ApiErrors.IsDatabaseError(exception))
+        {
+            logger.LogWarning(exception, "Database error for {Method} {Path}", context.Request.Method, context.Request.Path);
+            status = StatusCodes.Status503ServiceUnavailable;
+            code = "DATABASE_UNAVAILABLE";
+            message = "The database is not reachable right now. Please try again in a moment.";
         }
         else
         {

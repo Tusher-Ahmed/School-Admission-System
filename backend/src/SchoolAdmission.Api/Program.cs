@@ -12,11 +12,22 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "Database connection is not configured. Set the environment variable ConnectionStrings__Default " +
         "(or put it in backend/.env) - see README.");
 
+builder.Services.AddSingleton(AdmissionOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddDbContext<AdmissionDbContext>(o => o.UseNpgsql(connectionString));
+
+// The React app runs on another port, so the browser needs CORS. X-Student-Id is a custom header.
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
 await SchemaInitializer.EnsureSchemaAsync(connectionString);
+
+app.UseExceptionHandler();
+app.UseStatusCodePages(ApiErrors.WriteStatusCodeBody);
+app.UseCors();
 
 app.MapGet("/health", async (AdmissionDbContext db) =>
     await db.Database.CanConnectAsync()
